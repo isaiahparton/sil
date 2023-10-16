@@ -1,13 +1,9 @@
-package monl
+package sil
 
 import "core:io"
 
 /*
-	Minimal Object Notation Language
-
-	is an object notation and or markup language designed to be
-	easily read by both humans and computers. it is structured
-	with indentation. i like it.
+	Simple Information Language
 */
 
 PLACEHOLDER_RUNE :: '-'
@@ -17,9 +13,9 @@ INDENT_RUNE :: ' '
 General_Error :: enum {
 	Unsupported_Type,
 	Invalid_Character,
+	Invalid_Number,
 	Unexpected_Token,
-	Expected_Identifier,
-	Expected_Value,
+	Not_Found,
 	EOF,
 }
 
@@ -29,6 +25,7 @@ Error :: union {
 }
 
 Location :: struct {
+	offset,
 	line, 
 	column: int,
 }

@@ -1,6 +1,6 @@
 package example
 
-import son "../"
+import "../"
 
 import "core:os"
 import "core:io"
@@ -13,8 +13,10 @@ Actor :: struct {
 }
 
 Thing :: struct {
-	number: int,
+	number: f64,
 	name: string,
+	boolean: bool,
+	options: struct{mode: int, speed: f64},
 }
 
 Value :: union {
@@ -30,19 +32,18 @@ Key :: struct {
 }
 
 main :: proc() {
-	using son 
+	using sil 
 
 	pool: map[Key]Value
 
 	thing: Thing
 
-	if data, ok := os.read_entire_file("example.sml"); ok {
+	if data, ok := os.read_entire_file("example.sil"); ok {
 		p: Parser = {
 			t = {
 				data = string(data[:]),
 			},
 		}
-
 		if err := parse(&p, &thing); err != nil {
 			fmt.println(err)
 		}
