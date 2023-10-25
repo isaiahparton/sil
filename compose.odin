@@ -36,11 +36,12 @@ write_value_separator :: proc(c: ^Composer, type_info: ^runtime.Type_Info) -> (e
 	return
 }
 write_element_separator :: proc(c: ^Composer, type_info: ^runtime.Type_Info) -> (err: Error) {
-	#partial switch info in type_info.variant {
-		case runtime.Type_Info_Array, runtime.Type_Info_Dynamic_Array, runtime.Type_Info_Slice, runtime.Type_Info_Enumerated_Array, runtime.Type_Info_Map, runtime.Type_Info_Struct:
+	if type_requires_separator(type_info) {
 		io.write_byte(c.w, '-') or_return
 		c.indent += 1
 		write_indent(c) or_return
+	} else {
+		io.write_string(c.w, "- ")
 	}
 	return
 }

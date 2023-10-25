@@ -6,3 +6,25 @@ choices 3
 options
  mode 2
  speed 5.200
+array
+ - 2
+ - 7
+ - 255
+pool
+ -
+  key "you"
+  value 6
+ -
+  key "me"
+  value 5
+list
+ - "much list"
+ - "such data"
+ - "wow"
+ - ""
+ - ""
+ - ""
+ - ""
+ - ""
+ - ""
+ - ""

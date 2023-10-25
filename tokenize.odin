@@ -43,7 +43,6 @@ Tokenizer :: struct {
 	loc,
 	last_loc: Location,
 
-	last_token: Token,
 	next_token: Maybe(Token),
 
 	data: string,
@@ -188,17 +187,6 @@ next_token :: proc(t: ^Tokenizer) -> (token: Token, err: Error) {
 
 	token.width = t.loc.offset - token.offset
 
-	t.last_token = token
-
-	return
-}
-
-expect_literal :: proc(t: ^Tokenizer, kinds: Token_Kind_Set) -> (token: Token, err: Error) {
-	loc := t.last_token.loc
-	token, err = expect_token(t, kinds)
-	if token.column < loc.column || token.line < loc.line || token.line > loc.line + 1 {
-		err = .Literal_Not_Found
-	}
 	return
 }
 
@@ -231,20 +219,4 @@ print_loc_helper :: proc(str: string, loc: Location, width: int) {
 	fmt.print("\033[0m")
 
 	fmt.printf("\n")
-}
-
-expect_token :: proc(t: ^Tokenizer, kinds: Token_Kind_Set) -> (token: Token, err: Error) {
-	token, err = next_token(t)
-	if err == Tokenize_Error.EOF {
-		return
-	}
-	if token.kind == .Invalid {
-		err = .Invalid_Token
-	} else if token.kind not_in kinds {
-		// Print useful error messages
-		err = .Unexpected_Token
-		fmt.printf("\033[1m[%i:%i] Expected one of %v, but got %v\033[0m\n", token.line, token.column, kinds, token.kind)
-		print_loc_helper(t.data, token.loc, token.width)
-	}
-	return
 }

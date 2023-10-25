@@ -2,6 +2,7 @@ package sil
 
 import "core:io"
 import "core:strings"
+import "core:runtime"
 
 /*
 	Simple Information Language
@@ -29,4 +30,14 @@ Location :: struct {
 	offset,
 	line, 
 	column: int,
+}
+
+type_requires_separator :: proc(ti: ^runtime.Type_Info) -> bool {
+	#partial switch v in ti.variant {
+		case runtime.Type_Info_Array, runtime.Type_Info_Dynamic_Array, runtime.Type_Info_Slice, runtime.Type_Info_Enumerated_Array, runtime.Type_Info_Map, runtime.Type_Info_Struct:
+		return true 
+		case: 
+		return false
+	}
+	return false
 }

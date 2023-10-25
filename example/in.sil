@@ -1,9 +1,23 @@
-
 name "isaiah isakar partonian"
 number 12.5
 choice Third
 choices 3
+array
+ - 2
+ - 7
+ - 255
+pool
+ -
+  key "me"
+  value 5
+ -
+  key "you"
+  value 6
+list
+ - "much list"
+ - "such data"
+ - "wow"
+boolean true
 options
  mode 2
  speed 5.2
-boolean true
