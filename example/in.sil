@@ -1,0 +1,9 @@
+
+name "isaiah isakar partonian"
+number 12.5
+choice Third
+choices 3
+options
+ mode 2
+ speed 5.2
+boolean true

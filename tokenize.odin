@@ -11,18 +11,24 @@ import "core:runtime"
 import "core:unicode"
 import "core:unicode/utf8"
 
+Tokenize_Error :: enum {
+	EOF,
+}
 /*
 	Parsing!
 */
 Token_Kind :: enum {
+	Invalid,
 	True,
 	False,
 	Nil,
 	String,
-	Number,
-
+	Integer,
+	Real,
+	Separator,
 	Identifier,
 }
+Token_Kind_Set :: bit_set[Token_Kind]
 Token :: struct {
 	// Location in the source file
 	using loc: Location,
@@ -37,6 +43,9 @@ Tokenizer :: struct {
 	loc,
 	last_loc: Location,
 
+	last_token: Token,
+	next_token: Maybe(Token),
+
 	data: string,
 
 	got_indent: bool,
@@ -48,23 +57,13 @@ Tokenizer :: struct {
 	w: int,
 }
 
-skip_whitespace :: proc(t: ^Tokenizer) {
-	for {
-		switch next_rune(t) {
-			case ' ', '\t':
-			if !t.got_indent {
-			}
-			continue
-		}
-		break
-	}
-}
-
 next_rune :: proc(t: ^Tokenizer) -> rune {
-	t.loc.column += 1
+	t.last_loc = t.loc
 	if t.r == '\n' {
-		t.loc.column = 0
+		t.loc.column = 1
 		t.loc.line += 1
+	} else if t.r != '\r' {
+		t.loc.column += 1
 	}
 	t.loc.offset += t.w 
 	t.lr = t.r
@@ -105,67 +104,100 @@ is_valid_number :: proc(str: string) -> bool {
 }
 
 next_token :: proc(t: ^Tokenizer) -> (token: Token, err: Error) {
-	for {
-		next_rune(t)
+	if t.next_token != nil {
+		token = t.next_token.?
+		t.next_token = nil
+		return
+	} 
 
-		if t.r == '"' && t.lr != '\\' {
-			t.in_quotes = !t.in_quotes
-		}
+	if t.loc.line == 0 {
+		t.loc.line = 1
+	}
 
-		r := t.r
-
-		if t.loc.offset > t.last_loc.offset {
-			if ((t.r == ' ' || t.r == '\n') && !t.in_quotes) || t.r == utf8.RUNE_EOF {
-				// Return token
-				token.text = t.data[t.last_loc.offset:t.loc.offset]
-				token.kind = .Identifier
-
-				token.width = t.loc.offset - t.last_loc.offset
-				token.loc = t.last_loc
-
-				//next_rune(t)
-				t.last_loc = t.loc
-				t.last_loc.offset += t.w
-				// Parse token
-				if t.is_numeric {
-					token.kind = .Number
-				} else {
-					switch token.text {
-						case "true": 		token.kind = .True
-						case "false": 	token.kind = .False
-						case "nil": 		token.kind = .Nil
-						case: 
-						if len(token.text) > 1 {
-							if token.text[0] == '"' && token.text[len(token.text) - 1] == '"' {
-								token.text = token.text[1:len(token.text) - 1]
-								token.kind = .String 
-							}
-						}
-					}
-					t.is_numeric = true
-				}
-				fmt.println(token)
+	skip_whitespace :: proc(t: ^Tokenizer) -> rune {
+		for {
+			next_rune(t)
+			switch t.r {
+				case ' ', '\t', '\v', '\r', '\f', '\n':
+				continue
 			}
-		} else if t.r == ' ' || t.r == '\t' {
-			//next_rune(t)
-		}
-
-		if !unicode.is_number(r) && r != '.' && r != ' ' {
-			t.is_numeric = false
-		}
-
-		if token.width > 0 || r == utf8.RUNE_EOF {
 			break
 		}
+		return t.r
 	}
+
+	skip_whitespace(t)
+	token.loc = t.loc
+
+	switch t.r {
+		case utf8.RUNE_EOF: 
+		err = Tokenize_Error.EOF 
+		return
+
+		case '-':
+		token.kind = .Separator
+		token.text = t.data[token.offset:t.loc.offset]
+
+		case 'a'..='z', 'A'..='Z', '0'..='9', '_':
+		token.kind = .Integer
+		loop: for {
+			switch next_rune(t) {
+				case '.':
+				if token.kind == .Integer {
+					token.kind = .Real
+				} else if token.kind == .Real {
+					token.kind = .Invalid
+				}
+				case 'a'..='z', 'A'..='Z', '_':
+				token.kind = .Identifier
+				case '\r', '\n', ' ', utf8.RUNE_EOF:
+				break loop
+			}
+		}
+		token.text = t.data[token.offset:t.loc.offset]
+		if token.kind == .Identifier {
+			switch token.text {
+				case "true": token.kind = .True
+				case "false": token.kind = .False
+				case "nil": token.kind = .Nil
+			}
+		}
+
+		case '"': 
+		token.kind = .String
+		loop2: for {
+			next_rune(t)
+			if (t.r == '"' && t.lr != '\\') {
+				switch next_rune(t) {
+					case ' ', '\n', '\r':
+					break loop2
+					case: 
+					fmt.printf("\033[1m[%i:%i] Embedded quotes must be escaped like this: \\\"\033[0m\n", t.loc.line, t.loc.column)
+					print_loc_helper(t.data, t.last_loc, 1)
+				}
+			} else if t.r == utf8.RUNE_EOF {
+				token.kind = .Invalid
+				break
+			}
+		}
+		token.text = t.data[token.offset + 1:t.loc.offset - 1]
+
+		case '\r':
+		skip_rune(t)
+	}
+
+	token.width = t.loc.offset - token.offset
+
+	t.last_token = token
+
 	return
 }
 
-expect_literal :: proc(t: ^Tokenizer, kind: Token_Kind) -> (token: Token, err: Error) {
-	loc := t.loc
-	token, err = expect_token(t, kind)
-	if token.column <= loc.column || token.line < loc.line || token.line > loc.line + 1 {
-		err = .Not_Found
+expect_literal :: proc(t: ^Tokenizer, kinds: Token_Kind_Set) -> (token: Token, err: Error) {
+	loc := t.last_token.loc
+	token, err = expect_token(t, kinds)
+	if token.column < loc.column || token.line < loc.line || token.line > loc.line + 1 {
+		err = .Literal_Not_Found
 	}
 	return
 }
@@ -181,39 +213,38 @@ print_loc_helper :: proc(str: string, loc: Location, width: int) {
 	}
 	j := i
 	for ;; j += 1 {
-		if j == len(str) - 1 || str[j] == '\n' {
+		if j == len(str) || str[j] == '\n' {
 			break
 		}
 	}
-	fmt.printf("%s\n", str[i:j])
+	fmt.printf("\033[1m%s\n", str[i:j])
 	for k in 0..<(loc.offset - i) {
 		fmt.printf(" ")
 	}
+
+	fmt.print("\033[31m")
+
 	for k in 0..<width {
 		fmt.printf("~")
 	}
+
+	fmt.print("\033[0m")
+
 	fmt.printf("\n")
 }
 
-expect_token :: proc(t: ^Tokenizer, kind: Token_Kind) -> (token: Token, err: Error) {
+expect_token :: proc(t: ^Tokenizer, kinds: Token_Kind_Set) -> (token: Token, err: Error) {
 	token, err = next_token(t)
-	if token.kind != kind {
+	if err == Tokenize_Error.EOF {
+		return
+	}
+	if token.kind == .Invalid {
+		err = .Invalid_Token
+	} else if token.kind not_in kinds {
 		// Print useful error messages
 		err = .Unexpected_Token
-		if kind == .Identifier {
-			if token.kind == .Identifier {
-				if token.text == "-" {
-					fmt.printf("[%i:%i] Expected an identifier, but got '-'\n", token.line, token.column)
-					print_loc_helper(t.data, token.loc, token.width)
-				}
-			} else {
-				fmt.printf("[%i:%i] Expected an identifier but got '%v'\n", token.line, token.column, token.kind)
-				print_loc_helper(t.data, token.loc, token.width)
-			}
-		} else {
-			fmt.printf("[%i:%i] Expected '%v' but got '%v'\n", token.line, token.column, kind, token.kind)
-			print_loc_helper(t.data, token.loc, token.width)
-		}
+		fmt.printf("\033[1m[%i:%i] Expected one of %v, but got %v\033[0m\n", token.line, token.column, kinds, token.kind)
+		print_loc_helper(t.data, token.loc, token.width)
 	}
 	return
 }

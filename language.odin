@@ -1,6 +1,7 @@
 package sil
 
 import "core:io"
+import "core:strings"
 
 /*
 	Simple Information Language
@@ -11,17 +12,17 @@ VALUE_SEPARATOR_RUNE :: ' '
 INDENT_RUNE :: ' '
 
 General_Error :: enum {
+	Invalid_Token,
 	Unsupported_Type,
 	Invalid_Character,
-	Invalid_Number,
 	Unexpected_Token,
-	Not_Found,
-	EOF,
 }
 
 Error :: union {
 	io.Error,
 	General_Error,
+	Parse_Error,
+	Tokenize_Error,
 }
 
 Location :: struct {

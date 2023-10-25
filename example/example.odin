@@ -12,10 +12,20 @@ Actor :: struct {
 	name: string `# Hi! I'm a comment`,
 }
 
+Choice :: enum {
+	First,
+	Second,
+	Third,
+}
+
+Choice_Set :: bit_set[Choice]
+
 Thing :: struct {
 	number: f64,
 	name: string,
 	boolean: bool,
+	choice: Choice,
+	choices: Choice_Set,
 	options: struct{mode: int, speed: f64},
 }
 
@@ -38,7 +48,7 @@ main :: proc() {
 
 	thing: Thing
 
-	if data, ok := os.read_entire_file("example.sil"); ok {
+	if data, ok := os.read_entire_file("in.sil"); ok {
 		p: Parser = {
 			t = {
 				data = string(data[:]),
@@ -47,7 +57,12 @@ main :: proc() {
 		if err := parse(&p, &thing); err != nil {
 			fmt.println(err)
 		}
-
 		fmt.println(thing)
+		if file, err := os.open("out.sil", os.O_CREATE | os.O_WRONLY); err == os.ERROR_NONE {
+			c: Composer = {
+				w = io.to_writer(os.stream_from_handle(file))
+			}
+			compose(&c, thing)
+		}
 	}
 }
