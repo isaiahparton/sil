@@ -3,6 +3,7 @@ package sil
 import "core:io"
 import "core:os"
 import "core:fmt"
+import "core:mem"
 import "core:math/bits"
 import "core:strings"
 import "core:strconv"
@@ -79,8 +80,13 @@ compose :: proc(c: ^Composer, v: any) -> (err: Error) {
 				write_indent(c)
 			}
 			prev_indent := c.indent
+
 			write_element_separator(c, runtime.type_info_base(info.elem)) or_return
-			compose(c, any{data = rawptr(uintptr(v.data) + uintptr(i * info.elem_size)), id = info.elem.id}) or_return
+			elem_data := rawptr(uintptr(v.data) + uintptr(i * info.elem_size))
+			if mem.check_zero_ptr(elem_data, info.elem_size) {
+				continue
+			}
+			compose(c, any{data = elem_data, id = info.elem.id}) or_return
 			c.indent = prev_indent
 		}
 
@@ -103,14 +109,21 @@ compose :: proc(c: ^Composer, v: any) -> (err: Error) {
 			io.write_string(c.w, "nil") or_return
 		} else {
 			id := info.variants[tag-1].id
-			io.write_i64(c.w, tag - 1) or_return
-			write_value_separator(c, info.variants[tag-1])
+			if len(info.variants) > 1 {
+				io.write_i64(c.w, tag) or_return
+				write_value_separator(c, info.variants[tag-1])
+			}
 			compose(c, any{v.data, id}) or_return
 		}
 
 		case runtime.Type_Info_Struct:
+		j := 0
 		for name, i in info.names {
-			if (i > 0) {
+			field_data := rawptr(uintptr(v.data) + info.offsets[i])
+			if mem.check_zero_ptr(field_data, info.types[i].size) {
+				continue
+			}
+			if (j > 0) {
 				write_indent(c)
 			}
 			if (len(info.tags[i]) > 0) && (info.tags[i][0] == '#') {
@@ -120,8 +133,9 @@ compose :: proc(c: ^Composer, v: any) -> (err: Error) {
 			io.write_string(c.w, name) or_return
 			prev_indent := c.indent
 			write_value_separator(c, runtime.type_info_base(info.types[i])) or_return
-			compose(c, any{data = rawptr(uintptr(v.data) + info.offsets[i]), id = info.types[i].id}) or_return
+			compose(c, any{data = field_data, id = info.types[i].id}) or_return
 			c.indent = prev_indent
+			j += 1
 		}
 
 		case runtime.Type_Info_String: 

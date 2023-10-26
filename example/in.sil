@@ -18,6 +18,11 @@ list
  - "such data"
  - "wow"
 boolean true
+maybe "string"
+child
+ value 2 24
+ description "information"
+ hash 940281
 options
  mode 2
  speed 5.2

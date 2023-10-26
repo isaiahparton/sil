@@ -31,6 +31,14 @@ Thing :: struct {
 	array: [dynamic]int,
 	pool: map[string]int,
 	list: [10]string,
+	maybe: Maybe(string),
+	child: Sub_Thing,
+}
+
+Sub_Thing :: struct {
+	hash: u32,
+	description: string,
+	value: Value,
 }
 
 Value :: union {
@@ -64,7 +72,7 @@ main :: proc() {
 		fmt.printf("Finished parsing in %fms\n", time.duration_milliseconds(time.since(t)))
 
 		fmt.println(thing)
-		if file, err := os.open("out.sil", os.O_CREATE | os.O_WRONLY); err == os.ERROR_NONE {
+		if file, err := os.open("out.sil", os.O_CREATE | os.O_WRONLY | os.O_TRUNC); err == os.ERROR_NONE {
 			c: Composer = {
 				w = io.to_writer(os.stream_from_handle(file)),
 			}

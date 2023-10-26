@@ -19,6 +19,7 @@ Tokenize_Error :: enum {
 */
 Token_Kind :: enum {
 	Invalid,
+	Comment,
 	True,
 	False,
 	Nil,
@@ -132,6 +133,16 @@ next_token :: proc(t: ^Tokenizer) -> (token: Token, err: Error) {
 		case utf8.RUNE_EOF: 
 		err = Tokenize_Error.EOF 
 		return
+
+		case '#':
+		token.kind = .Comment 
+		loop3: for {
+			switch next_rune(t) {
+				case '\r', '\n', utf8.RUNE_EOF:
+				break loop3
+			}
+		}
+		token.text = t.data[token.offset:t.loc.offset]
 
 		case '-':
 		token.kind = .Separator

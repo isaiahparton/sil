@@ -59,6 +59,34 @@ parse :: proc(p: ^Parser, v: any) -> (err: Error) {
 		}
 		// Assign the data to the slice*/
 
+		case runtime.Type_Info_Union: 
+		index := 1
+		if len(info.variants) > 1 {
+			// Get tag value
+			p.token = expect_token(p, {.Integer}) or_return
+			if n, ok := strconv.parse_int(p.token.text); ok {
+				if n > len(info.variants) {
+					fmt.printf("\033[1m[%i:%i] Union tag out of bounds!\033[0m\n", p.token.line, p.token.column)
+					print_loc_helper(p.t.data, p.token.loc, p.token.width)
+					break
+				} else {
+					index = n
+				}
+			}
+		}
+		parse(p, any{data = v.data, id = info.variants[index if info.no_nil else (index - 1)].id})
+		tag_v := any{data = rawptr(uintptr(v.data) + info.tag_offset), id = info.tag_type.id}
+		switch &tag in &tag_v {
+			case i8: tag = i8(index)
+			case u8: tag = u8(index)
+			case i16: tag = i16(index)
+			case u16: tag = u16(index)
+			case i32: tag = i32(index)
+			case u32: tag = u32(index)
+			case i64: tag = i64(index)
+			case u64: tag = u64(index)
+		}
+
 		case runtime.Type_Info_Array: 
 		// Expected column for identifiers
 		column := p.last_token.column + 1
@@ -278,6 +306,14 @@ parse :: proc(p: ^Parser, v: any) -> (err: Error) {
 	return
 }
 
+skip_comments :: proc(p: ^Parser) -> (token: Token, err: Error) {
+	token, err = next_token(&p.t)
+	for token.kind == .Comment {
+		token, err = next_token(&p.t)
+	}
+	return
+}
+
 expect_literal :: proc(p: ^Parser, kinds: Token_Kind_Set) -> (token: Token, err: Error) {
 	loc := p.last_token.loc
 	token, err = expect_token(p, kinds)
@@ -289,7 +325,7 @@ expect_literal :: proc(p: ^Parser, kinds: Token_Kind_Set) -> (token: Token, err:
 }
 
 expect_token_indent :: proc(p: ^Parser, kinds: Token_Kind_Set, column: int) -> (token: Token, err: Error) {
-	token, err = next_token(&p.t)
+	token, err = skip_comments(p)
 	if token.column != column {
 		p.t.next_token = token
 		err = .Invalid_Indentation
@@ -311,10 +347,7 @@ expect_token_indent :: proc(p: ^Parser, kinds: Token_Kind_Set, column: int) -> (
 }
 
 expect_token :: proc(p: ^Parser, kinds: Token_Kind_Set) -> (token: Token, err: Error) {
-	token, err = next_token(&p.t)
-	if err == Tokenize_Error.EOF {
-		return
-	}
+	token, err = skip_comments(p)
 	if token.kind == .Invalid {
 		err = .Invalid_Token
 	} else if token.kind not_in kinds {
