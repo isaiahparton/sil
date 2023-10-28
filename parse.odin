@@ -15,15 +15,18 @@ import "core:unicode/utf8"
 
 Parse_Error :: enum {
 	Literal_Not_Found,
-	Invalid_Indentation,
 	Invalid_Enum_Value,
 	Invalid_Enum_Value_Type,
+	Indent_Increased,
+	Indent_Decreased,
 }
 
 Parser :: struct {
 	t: Tokenizer,
 	token,
 	last_token: Token,
+	// Expected indentation of tokens
+	indent: int,
 }
 
 parse :: proc(p: ^Parser, v: any) -> (err: Error) {
@@ -43,7 +46,7 @@ parse :: proc(p: ^Parser, v: any) -> (err: Error) {
 		column := p.last_token.column + 1
 		// Loop until indent decreases
 		for {
-			p.token, err = expect_token_indent(p, {.Separator}, column)
+			p.token, err = expect_token_indent(p, {.Separator})
 			if err != nil {
 				if err == .Invalid_Indentation {
 					err = nil
@@ -88,76 +91,106 @@ parse :: proc(p: ^Parser, v: any) -> (err: Error) {
 		}
 
 		case runtime.Type_Info_Array: 
-		// Expected column for identifiers
-		column := p.last_token.column + 1
-		// Require separator?
-		require_separator := type_requires_separator(info.elem)
-		// Stuff
-		index: int
-		// Loop until indent decreases
-		for {
-			p.token, err = expect_token_indent(p, {.Separator}, column)
-			if err != nil {
-				if err == .Invalid_Indentation {
+		{
+			// Expected column for identifiers
+			p.indent += 1
+			// Require separator?
+			require_separator := type_requires_separator(info.elem)
+			// Stuff
+			index: int
+			// Loop until indent decreases
+			for {
+				p.token, err = expect_token_indent(p, {.Separator})
+				// Handle indent errors
+				if err == .Indent_Increased || err == .Indent_Decreased {
 					err = nil
 					break
-				} else {
+				} else if err != nil {
 					return
 				}
-			}
-			parse(p, any{data = rawptr(uintptr(v.data) + uintptr(index * info.elem_size)), id = info.elem.id}) or_return
-			index += 1
-			if index == info.count {
-				break
+				parse(p, any{data = rawptr(uintptr(v.data) + uintptr(index * info.elem_size)), id = info.elem.id}) or_return
+				index += 1
+				if index == info.count {
+					break
+				}
 			}
 		}
 
 		case runtime.Type_Info_Dynamic_Array: 
-		// Expected column for identifiers
-		column := p.last_token.column + 1
-		// Loop until indent decreases
-		for {
-			p.token, err = expect_token_indent(p, {.Separator}, column)
-			if err != nil {
-				if err == .Invalid_Indentation {
+		{
+			// Expected column for identifiers
+			p.indent += 1
+			// Loop until indent decreases
+			for {
+				p.token, err = expect_token_indent(p, {.Separator})
+				// Handle indent errors
+				if err == .Indent_Increased || err == .Indent_Decreased {
 					err = nil
 					break
-				} else {
+				} else if err != nil {
 					return
 				}
+				item_data, _ := mem.alloc(info.elem.size)
+				defer mem.free(item_data)
+				parse(p, any{data = item_data, id = info.elem.id}) or_return
+				runtime.__dynamic_array_append(v.data, info.elem_size, info.elem.align, item_data, 1)
 			}
-			item_data, _ := mem.alloc(info.elem.size)
-			defer mem.free(item_data)
-			parse(p, any{data = item_data, id = info.elem.id}) or_return
-			runtime.__dynamic_array_append(v.data, info.elem_size, info.elem.align, item_data, 1)
 		}
 
+		/*
+			Parsing of maps should allow for simpler notation if the key is a type that can be represented
+			on one line
+		*/
 		case runtime.Type_Info_Map:
-		// Get raw map
-		raw_map := transmute(^runtime.Raw_Map)v.data
-		// Expected column for identifiers
-		column := p.last_token.column + 1
-		// Loop until indent decreases
-		for {
-			p.token, err = expect_token_indent(p, {.Separator}, column)
-			if err != nil {
-				if err == .Invalid_Indentation {
-					err = nil
-					break
-				} else {
-					return
+		{
+			// Get raw map
+			raw_map := transmute(^runtime.Raw_Map)v.data
+			// Expected column for identifiers
+			p.indent += 1
+			#partial switch key_info in info.key.variant {
+				case runtime.Type_Info_Struct, runtime.Type_Info_Array, runtime.Type_Info_Enumerated_Array: 
+				// Loop until indent decreases
+				for {
+					p.token, err = expect_token_indent(p, {.Separator})
+					// Handle indent errors
+					if err == .Indent_Increased || err == .Indent_Decreased {
+						err = nil
+						break
+					} else if err != nil {
+						return
+					}
+					p.indent += 1
+					// Key
+					p.token = expect_token_indent(p, {.Identifier}) or_return
+					if p.token.text == "key" {
+						key_data, _ := mem.alloc(info.key.size)
+						defer mem.free(key_data)
+						parse(p, any{data = key_data, id = info.key.id}) or_return 
+						// Value
+						p.token = expect_token_indent(p, {.Identifier}) or_return
+						if p.token.text == "value" {
+							value_data, _ := mem.alloc(info.value.size)
+							defer mem.free(value_data)
+							parse(p, any{data = value_data, id = info.value.id}) or_return 
+							// Insert new pair
+							runtime.__dynamic_map_set_without_hash(raw_map, info.map_info, key_data, value_data)
+						}
+					}
 				}
-			}
-			column := p.last_token.column + 1
-			// Key
-			p.token = expect_token_indent(p, {.Identifier}, column) or_return
-			if p.token.text == "key" {
-				key_data, _ := mem.alloc(info.key.size)
-				defer mem.free(key_data)
-				parse(p, any{data = key_data, id = info.key.id}) or_return 
-				// Value
-				p.token = expect_token_indent(p, {.Identifier}, column) or_return
-				if p.token.text == "value" {
+				case runtime.Type_Info_Map:
+				panic("NOooOO! I wOn't parse a map as a key for another MAaaap! StooOOp!")
+				/*
+					Case for simple notation
+
+						"key" "value"
+				*/
+				case: 
+				for {
+					// Parse the key
+					key_data, _ := mem.alloc(info.key.size)
+					defer mem.free(key_data)
+					parse(p, any{data = key_data, id = info.key.id}) or_return 
+					// Parse the Value
 					value_data, _ := mem.alloc(info.value.size)
 					defer mem.free(value_data)
 					parse(p, any{data = value_data, id = info.value.id}) or_return 
@@ -169,17 +202,16 @@ parse :: proc(p: ^Parser, v: any) -> (err: Error) {
 
 		case runtime.Type_Info_Struct:
 		// Expected column for identifiers
-		column := p.last_token.column + 1
+		p.indent += 1
 		// Loop until indent decreases
 		for {
-			p.token, err = expect_token_indent(p, {.Identifier}, column)
-			if err != nil {
-				if err == .Invalid_Indentation {
-					err = nil
-					break
-				} else {
-					return
-				}
+			p.token, err = expect_token_indent(p, {.Identifier})
+			// Handle indent errors
+			if err == .Indent_Increased || err == .Indent_Decreased {
+				err = nil
+				break
+			} else if err != nil {
+				return
 			}
 			// Find field
 			found := false
@@ -227,6 +259,9 @@ parse :: proc(p: ^Parser, v: any) -> (err: Error) {
 			}
 		}
 
+		/*
+			Allow parsing by enum value name or by integer value
+		*/
 		case runtime.Type_Info_Enum:
 		p.token = expect_literal(p, {.Identifier, .Integer}) or_return
 		#partial switch p.token.kind {
@@ -302,7 +337,6 @@ parse :: proc(p: ^Parser, v: any) -> (err: Error) {
 			case f16: i = f16(strconv.parse_f64(p.token.text) or_else 0)
 		}
 	}
-
 	return
 }
 
@@ -317,6 +351,7 @@ skip_comments :: proc(p: ^Parser) -> (token: Token, err: Error) {
 expect_literal :: proc(p: ^Parser, kinds: Token_Kind_Set) -> (token: Token, err: Error) {
 	loc := p.last_token.loc
 	token, err = expect_token(p, kinds)
+	// Expect the token to be either directly after the last or on the next line with increased indent
 	if token.column <= loc.column || token.line < loc.line || token.line > loc.line + 1 {
 		err = .Literal_Not_Found
 	}
@@ -324,33 +359,51 @@ expect_literal :: proc(p: ^Parser, kinds: Token_Kind_Set) -> (token: Token, err:
 	return
 }
 
-expect_token_indent :: proc(p: ^Parser, kinds: Token_Kind_Set, column: int) -> (token: Token, err: Error) {
+expect_token_indent :: proc(p: ^Parser, kinds: Token_Kind_Set) -> (token: Token, err: Error) {
+	// Skip comments and get next token
 	token, err = skip_comments(p)
-	if token.column != column {
-		p.t.next_token = token
-		err = .Invalid_Indentation
-		return
-	}
+	// EOF is not necessarily an error
 	if err == Tokenize_Error.EOF {
 		return
 	}
 	if token.kind == .Invalid {
 		err = .Invalid_Token
-	} else if token.kind not_in kinds {
-		// Print useful error messages
-		err = .Unexpected_Token
-		fmt.printf("\033[1m[%i:%i] Expected one of %v, but got %v\033[0m\n", token.line, token.column, kinds, token.kind)
-		print_loc_helper(p.t.data, token.loc, token.width)
+	} else {
+		// Check if indentation matches
+		if token.column != p.indent {
+			p.t.next_token = token
+			// Return what happened
+			if token.column > p.indent {
+				err = .Indent_Increased
+				fmt.printf("\033[1m[%i:%i] Unexpected indentation\033[0m\n", token.line, token.column)
+				print_loc_helper(p.t.data, token.loc, token.width)
+			} else {
+				err = .Indent_Decreased
+				p.indent -= 1
+			}
+			return
+		}
+		if kinds != {} && token.kind not_in kinds {
+			// Print useful error messages
+			err = .Unexpected_Token
+			fmt.printf("\033[1m[%i:%i] Expected one of %v, but got %v\033[0m\n", token.line, token.column, kinds, token.kind)
+			print_loc_helper(p.t.data, token.loc, token.width)
+		}
 	}
 	p.last_token = token
 	return
 }
 
 expect_token :: proc(p: ^Parser, kinds: Token_Kind_Set) -> (token: Token, err: Error) {
+	// Skip comments and get next token
 	token, err = skip_comments(p)
+	// EOF is not necessarily an error
+	if err == Tokenize_Error.EOF {
+		return
+	}
 	if token.kind == .Invalid {
 		err = .Invalid_Token
-	} else if token.kind not_in kinds {
+	} else if kinds != {} && token.kind not_in kinds {
 		// Print useful error messages
 		err = .Unexpected_Token
 		fmt.printf("\033[1m[%i:%i] Expected one of %v, but got %v\033[0m\n", token.line, token.column, kinds, token.kind)

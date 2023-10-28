@@ -258,31 +258,38 @@ compose :: proc(c: ^Composer, v: any) -> (err: Error) {
 				i += 1
 				key   := rawptr(runtime.map_cell_index_dynamic(ks, info.map_info.ks, bucket_index))
 				value := rawptr(runtime.map_cell_index_dynamic(vs, info.map_info.vs, bucket_index))
-				// Save previous indent
-				prev_indent := c.indent
-				// Begin the entry
-				io.write_string(c.w, "-") or_return
-				c.indent += 1
-				write_indent(c) or_return
-				// Print the key as a struct field
-				{
-					io.write_string(c.w, "key") or_return
+				#partial switch i in info.key.variant {
+					case runtime.Type_Info_Struct, runtime.Type_Info_Array: 
+					// Save previous indent
 					prev_indent := c.indent
-					write_value_separator(c, runtime.type_info_base(info.key)) or_return
-					compose(c, any{key, info.key.id}) or_return
-					c.indent = prev_indent
+					// Begin the entry
+					io.write_string(c.w, "-") or_return
+					c.indent += 1
 					write_indent(c) or_return
-				}
-				// And likewise, the value
-				{
-					io.write_string(c.w, "value") or_return
-					prev_indent := c.indent
-					write_value_separator(c, runtime.type_info_base(info.value)) or_return
-					compose(c, any{value, info.value.id}) or_return
+					// Print the key as a struct field
+					{
+						io.write_string(c.w, "key") or_return
+						prev_indent := c.indent
+						write_value_separator(c, runtime.type_info_base(info.key)) or_return
+						compose(c, any{key, info.key.id}) or_return
+						c.indent = prev_indent
+						write_indent(c) or_return
+					}
+					// And likewise, the value
+					{
+						io.write_string(c.w, "value") or_return
+						prev_indent := c.indent
+						write_value_separator(c, runtime.type_info_base(info.value)) or_return
+						compose(c, any{value, info.value.id}) or_return
+						c.indent = prev_indent
+					}
+					// Return to previous indent
 					c.indent = prev_indent
+					case:
+					compose(c, any{key, info.key.id}) or_return
+					write_value_separator(c, runtime.type_info_base(info.value)) or_return
+					compose(c, any{value, info.value.id})
 				}
-				// Return to previous indent
-				c.indent = prev_indent
 			}
 		}
 	}

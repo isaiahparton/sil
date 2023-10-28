@@ -48,10 +48,6 @@ Tokenizer :: struct {
 
 	data: string,
 
-	got_indent: bool,
-	in_quotes: bool,
-	is_numeric: bool,
-
 	lr,
 	r: rune,
 	w: int,
@@ -197,6 +193,11 @@ next_token :: proc(t: ^Tokenizer) -> (token: Token, err: Error) {
 	}
 
 	token.width = t.loc.offset - token.offset
+
+	if token.kind == .Invalid {
+		fmt.printf("\033[1m[%i:%i] Invalid token\033[0m\n", token.line, token.column)
+		print_loc_helper(t.data, token.loc, token.width)
+	}
 
 	return
 }

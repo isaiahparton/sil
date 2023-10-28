@@ -1,28 +1,7 @@
-name "isaiah isakar partonian"
+name "isaiah partonian"
 number 12.5
 choice Third
-choices 3
-array
- - 2
- - 7
- - 255
-pool
- -
-  key "me"
-  value 5
- -
-  key "you"
-  value 6
-list
- - "much list"
- - "such data"
- - "wow"
-boolean true
-maybe "string"
 child
- value 2 24
- description "information"
- hash 940281
-options
- mode 2
- speed 5.2
+ hash 123
+pool
+ "isaiah" 19

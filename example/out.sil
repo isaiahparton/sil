@@ -1,35 +1,7 @@
 number 12.500
-name "isaiah isakar partonian"
-boolean true
+name "isaiah partonian"
 choice 2
-choices 3
-options
- mode 2
- speed 5.200
-array
- - 2
- - 7
- - 255
 pool
- -
-  key "you"
-  value 6
- -
-  key "me"
-  value 5
-list
- - "much list"
- - "such data"
- - "wow"
- - 
- - 
- - 
- - 
- - 
- - 
- - 
-maybe "string"
+ "isaiah" 19
 child
- hash 940281
- description "information"
- value 2 24
+ hash 123
