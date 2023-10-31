@@ -27,6 +27,8 @@ Parser :: struct {
 	last_token: Token,
 	// Expected indentation of tokens
 	indent: int,
+	// If parser should delete old data
+	// replace: bool,
 }
 
 parse :: proc(p: ^Parser, v: any) -> (err: Error) {
@@ -39,28 +41,32 @@ parse :: proc(p: ^Parser, v: any) -> (err: Error) {
 		return parse(p, any{data = (transmute(^rawptr)v.data)^, id = info.elem.id})
 
 		case runtime.Type_Info_Slice: 
-		return .Unsupported_Type
-		/*// Make a dynamic array first
-		raw_array: runtime.Raw_Dynamic_Array
-		// Expected column for identifiers
-		column := p.last_token.column + 1
+		data, _ := runtime.mem_alloc(info.elem_size, align_of(info.elem.id))
+		// Make a dynamic array first
+		raw_array: runtime.Raw_Dynamic_Array = {
+			data = raw_data(data),
+			cap = 1,
+		}
 		// Loop until indent decreases
 		for {
 			p.token, err = expect_token_indent(p, {.Separator})
-			if err != nil {
-				if err == .Invalid_Indentation {
-					err = nil
-					break
-				} else {
-					return
-				}
+			// Handle indent errors
+			if err == .Indent_Increased || err == .Indent_Decreased {
+				err = nil
+				break
+			} else if err != nil {
+				return
 			}
 			item_data, _ := mem.alloc(info.elem.size)
 			defer mem.free(item_data)
 			parse(p, any{data = item_data, id = info.elem.id}) or_return
-			runtime.__dynamic_array_append(v.data, info.elem_size, info.elem.align, item_data, 1)
+			runtime.__dynamic_array_append(&raw_array, info.elem_size, info.elem.align, item_data, 1)
 		}
-		// Assign the data to the slice*/
+		// Assign the data to the slice
+		(transmute(^runtime.Raw_Slice)v.data)^ = {
+			data = raw_array.data,
+			len = raw_array.len,
+		}
 
 		case runtime.Type_Info_Union: 
 		index := 1
@@ -92,6 +98,11 @@ parse :: proc(p: ^Parser, v: any) -> (err: Error) {
 
 		case runtime.Type_Info_Array: 
 		{
+			/*if p.replace {
+				for i in 0..<info.count {
+					destroy_recursive(rawptr(uintptr(v.data) + uintptr(info.elem_size * i)), info.elem)
+				}
+			}*/
 			// Expected column for identifiers
 			p.indent += 1
 			// Require separator?
@@ -116,8 +127,49 @@ parse :: proc(p: ^Parser, v: any) -> (err: Error) {
 			}
 		}
 
+		case runtime.Type_Info_Enumerated_Array: 
+		{
+			/*if p.replace {
+				for i in 0..<info.count {
+					destroy_recursive(rawptr(uintptr(v.data) + uintptr(info.elem_size * i)), info.elem)
+				}
+			}*/
+			enum_info := info.index.variant.(runtime.Type_Info_Enum)
+			names_parsed := make([]bool, len(enum_info.names))
+			// Expected column for identifiers
+			p.indent += 1
+			// Require separator?
+			require_separator := type_requires_separator(info.elem)
+			// Stuff
+			index: int
+			// Loop until indent decreases
+			for {
+				p.token, err = expect_token_indent(p, {.Identifier})
+				// Handle indent errors
+				if err == .Indent_Increased || err == .Indent_Decreased {
+					err = nil
+					break
+				} else if err != nil {
+					return
+				}
+				for &name, i in enum_info.names {
+					if !names_parsed[i] && name == p.token.text {
+						names_parsed[i] = true 
+						parse(p, any{data = rawptr(uintptr(v.data) + uintptr(i * info.elem_size)), id = info.elem.id}) or_return
+						break
+					}
+				}
+			}
+		}
+
 		case runtime.Type_Info_Dynamic_Array: 
 		{
+			/*if p.replace {
+				raw_array := transmute(^runtime.Raw_Dynamic_Array)v.data
+				for i in 0..<raw_array.len {
+					destroy_recursive(rawptr(uintptr(raw_array.data) + uintptr(i * info.elem_size)), info.elem)
+				}
+			}*/
 			// Expected column for identifiers
 			p.indent += 1
 			// Loop until indent decreases
@@ -145,6 +197,18 @@ parse :: proc(p: ^Parser, v: any) -> (err: Error) {
 		{
 			// Get raw map
 			raw_map := transmute(^runtime.Raw_Map)v.data
+			// Replacement
+			/*if p.replace {
+				ks, vs, hs, _, _ := runtime.map_kvh_data_dynamic(raw_map^, info.map_info)
+				for it := 0; it < int(runtime.map_cap(raw_map^)); it += 1 {
+					if hash := hs[it]; runtime.map_hash_is_valid(hash) {
+						key   := runtime.map_cell_index_dynamic(ks, info.map_info.ks, uintptr(it))
+						value := runtime.map_cell_index_dynamic(vs, info.map_info.vs, uintptr(it))
+						destroy_recursive(rawptr(key), info.key)
+						destroy_recursive(rawptr(value), info.value)
+					}
+				}
+			}*/
 			// Expected column for identifiers
 			p.indent += 1
 			#partial switch key_info in info.key.variant {
@@ -178,7 +242,7 @@ parse :: proc(p: ^Parser, v: any) -> (err: Error) {
 					}
 				}
 				case runtime.Type_Info_Map:
-				panic("NOooOO! I wOn't parse a map as a key for another MAaaap! StooOOp!")
+				panic("Will not parse a map as a map key")
 				/*
 					Case for simple notation
 
@@ -231,6 +295,9 @@ parse :: proc(p: ^Parser, v: any) -> (err: Error) {
 
 		case runtime.Type_Info_String: 
 		p.token = expect_literal(p, {.String}) or_return 
+		if p.replace {
+			delete((transmute(^string)v.data)^)
+		}
 		(transmute(^string)v.data)^ = strings.clone(p.token.text)
 
 		case runtime.Type_Info_Boolean: 

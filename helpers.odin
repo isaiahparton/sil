@@ -3,10 +3,18 @@ package sil
 import "core:io"
 import "core:os"
 
-parse_from_slice :: proc(data: []u8, v: any) -> (err: Error) {
+parse_slice :: proc(data: []u8, v: any) -> (err: Error) {
 	p: Parser = {
 		t = {
 			data = string(data[:]),
+		},
+	}
+	return parse(&p, v)
+}
+parse_string :: proc(data: string, v: any) -> (err: Error) {
+	p: Parser = {
+		t = {
+			data = data,
 		},
 	}
 	return parse(&p, v)

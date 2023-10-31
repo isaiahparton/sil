@@ -51,26 +51,39 @@ compose :: proc(c: ^Composer, v: any) -> (err: Error) {
 
 	#partial switch info in ti.variant {
 		case runtime.Type_Info_Dynamic_Array:
-		arr := transmute(^runtime.Raw_Dynamic_Array)v.data
-		for i in 0..<arr.len {
+		raw_array := transmute(^runtime.Raw_Dynamic_Array)v.data
+		for i in 0..<raw_array.len {
 			if (i > 0) {
 				write_indent(c)
 			}
 			prev_indent := c.indent
 			write_element_separator(c, runtime.type_info_base(info.elem)) or_return
-			compose(c, any{data = rawptr(uintptr(arr.data) + uintptr(i * info.elem_size)), id = info.elem.id}) or_return
+			compose(c, any{data = rawptr(uintptr(raw_array.data) + uintptr(i * info.elem_size)), id = info.elem.id}) or_return
+			c.indent = prev_indent
+		}
+
+		case runtime.Type_Info_Enumerated_Array:
+		index_info := info.index.variant.(runtime.Type_Info_Enum)
+		for i in 0..<info.count {
+			if (i > 0) {
+				write_indent(c)
+			}
+			prev_indent := c.indent
+			io.write_string(c.w, index_info.names[i]) or_return
+			write_element_separator(c, runtime.type_info_base(info.elem)) or_return
+			compose(c, any{data = rawptr(uintptr(v.data) + uintptr(i * info.elem_size)), id = info.elem.id}) or_return
 			c.indent = prev_indent
 		}
 
 		case runtime.Type_Info_Slice:
-		slc := transmute(^runtime.Raw_Slice)v.data
-		for i in 0..<slc.len {
+		raw_slice := transmute(^runtime.Raw_Slice)v.data
+		for i in 0..<raw_slice.len {
 			if (i > 0) {
 				write_indent(c)
 			}
 			prev_indent := c.indent
 			write_element_separator(c, runtime.type_info_base(info.elem)) or_return
-			compose(c, any{data = rawptr(uintptr(slc.data) + uintptr(i * info.elem_size)), id = info.elem.id}) or_return
+			compose(c, any{data = rawptr(uintptr(raw_slice.data) + uintptr(i * info.elem_size)), id = info.elem.id}) or_return
 			c.indent = prev_indent
 		}
 

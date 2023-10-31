@@ -74,31 +74,6 @@ skip_rune :: proc(t: ^Tokenizer) {
 	t.loc.offset += t.w
 }
 
-is_valid_number :: proc(str: string) -> bool {
-	saw_decimal: bool
-	str := str
-	if len(str) < 1 {
-		return false
-	}
-	if str[0] == '-' || str[1] == '+' {
-		str = str[1:]
-	}
-	for r, i in str {
-		if !unicode.is_number(r) {
-			if r == '.' {
-				if saw_decimal {
-					return false 
-				} else {
-					return true
-				}
-			} else {
-				return false 
-			}
-		}
-	}
-	return true
-}
-
 next_token :: proc(t: ^Tokenizer) -> (token: Token, err: Error) {
 	if t.next_token != nil {
 		token = t.next_token.?
@@ -181,7 +156,9 @@ next_token :: proc(t: ^Tokenizer) -> (token: Token, err: Error) {
 					fmt.printf("\033[1m[%i:%i] Embedded quotes must be escaped like this: \\\"\033[0m\n", t.loc.line, t.loc.column)
 					print_loc_helper(t.data, t.last_loc, 1)
 				}
-			} else if t.r == utf8.RUNE_EOF {
+			} else if t.r == utf8.RUNE_EOF || t.r == '\n' {
+				fmt.printf("\033[1m[%i:%i] Open ended string!\033[0m\n", t.loc.line, t.loc.column)
+				print_loc_helper(t.data, t.last_loc, 1)
 				token.kind = .Invalid
 				break
 			}

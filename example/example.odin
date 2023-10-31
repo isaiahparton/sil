@@ -7,12 +7,6 @@ import "core:io"
 import "core:fmt"
 import "core:time"
 
-Actor :: struct {
-	point: [2]f32,
-	flags: bit_set[0..<8],
-	name: string `# Hi! I'm a comment`,
-}
-
 Choice :: enum {
 	First,
 	Second,
