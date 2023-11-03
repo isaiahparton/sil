@@ -2,6 +2,7 @@ package sil
 
 import "core:io"
 import "core:os"
+import "core:strings"
 
 parse_slice :: proc(data: []u8, v: any) -> (err: Error) {
 	p: Parser = {
@@ -18,6 +19,15 @@ parse_string :: proc(data: string, v: any) -> (err: Error) {
 		},
 	}
 	return parse(&p, v)
+}
+compose_to_string :: proc(v: any) -> (str: string, err: Error) {
+	b: strings.Builder
+	c: Composer = {
+		w = strings.to_writer(&b),
+	}
+	err = compose(&c, v)
+	str = strings.to_string(b)
+	return
 }
 compose_to_writer :: proc(w: io.Writer, v: any) -> (err: Error) {
 	c: Composer = {

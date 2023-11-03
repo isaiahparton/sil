@@ -29,6 +29,7 @@ Parser :: struct {
 	indent: int,
 	// If parser should delete old data
 	// replace: bool,
+	ignore_unexpected: bool,
 }
 
 parse :: proc(p: ^Parser, v: any) -> (err: Error) {
@@ -249,15 +250,27 @@ parse :: proc(p: ^Parser, v: any) -> (err: Error) {
 						"key" "value"
 				*/
 				case: 
+				p.ignore_unexpected = true
+				defer p.ignore_unexpected = false
 				for {
 					// Parse the key
 					key_data, _ := mem.alloc(info.key.size)
 					defer mem.free(key_data)
-					parse(p, any{data = key_data, id = info.key.id}) or_return 
+					if key_err := parse(p, any{data = key_data, id = info.key.id}); key_err != nil {
+						if key_err != .Unexpected_Token {
+							err = key_err
+						}
+						return
+					}
 					// Parse the Value
 					value_data, _ := mem.alloc(info.value.size)
 					defer mem.free(value_data)
-					parse(p, any{data = value_data, id = info.value.id}) or_return 
+					if value_err := parse(p, any{data = value_data, id = info.value.id}); value_err != nil {
+						if value_err != .Unexpected_Token {
+							err = value_err
+						}
+						return
+					}
 					// Insert new pair
 					runtime.__dynamic_map_set_without_hash(raw_map, info.map_info, key_data, value_data)
 				}
@@ -295,14 +308,20 @@ parse :: proc(p: ^Parser, v: any) -> (err: Error) {
 
 		case runtime.Type_Info_String: 
 		p.token = expect_literal(p, {.String}) or_return 
-		if p.replace {
+		/*if p.replace {
 			delete((transmute(^string)v.data)^)
-		}
+		}*/
 		(transmute(^string)v.data)^ = strings.clone(p.token.text)
 
 		case runtime.Type_Info_Boolean: 
 		p.token = expect_literal(p, {.True, .False}) or_return
-		(transmute(^bool)v.data)^ = true if p.token.kind == .True else false
+		switch &b in v {
+			case bool: b = true if p.token.kind == .True else false
+			case b8: b = true if p.token.kind == .True else false
+			case b16: b = true if p.token.kind == .True else false
+			case b32: b = true if p.token.kind == .True else false
+			case b64: b = true if p.token.kind == .True else false
+		}
 
 		case runtime.Type_Info_Bit_Set:
 		p.token = expect_literal(p, {.Integer}) or_return 
@@ -419,10 +438,9 @@ expect_literal :: proc(p: ^Parser, kinds: Token_Kind_Set) -> (token: Token, err:
 	loc := p.last_token.loc
 	token, err = expect_token(p, kinds)
 	// Expect the token to be either directly after the last or on the next line with increased indent
-	if token.column <= loc.column || token.line < loc.line || token.line > loc.line + 1 {
+	if token.line > loc.line && token.column == loc.column {
 		err = .Literal_Not_Found
 	}
-	p.last_token = token
 	return
 }
 
@@ -431,13 +449,13 @@ expect_token_indent :: proc(p: ^Parser, kinds: Token_Kind_Set) -> (token: Token,
 	token, err = skip_comments(p)
 	// EOF is not necessarily an error
 	if err == Tokenize_Error.EOF {
-		return
+		err = nil
 	}
 	if token.kind == .Invalid {
 		err = .Invalid_Token
 	} else {
 		// Check if indentation matches
-		if token.column != p.indent {
+		if token.line > p.last_token.line && token.column != p.indent {
 			p.t.next_token = token
 			// Return what happened
 			if token.column > p.indent {
@@ -466,15 +484,19 @@ expect_token :: proc(p: ^Parser, kinds: Token_Kind_Set) -> (token: Token, err: E
 	token, err = skip_comments(p)
 	// EOF is not necessarily an error
 	if err == Tokenize_Error.EOF {
-		return
+		err = nil
 	}
 	if token.kind == .Invalid {
 		err = .Invalid_Token
 	} else if kinds != {} && token.kind not_in kinds {
-		// Print useful error messages
 		err = .Unexpected_Token
-		fmt.printf("\033[1m[%i:%i] Expected one of %v, but got %v\033[0m\n", token.line, token.column, kinds, token.kind)
-		print_loc_helper(p.t.data, token.loc, token.width)
+		if p.ignore_unexpected {
+			p.t.next_token = token
+		} else {
+			// Print useful error messages
+			fmt.printf("\033[1m[%i:%i] Expected one of %v, but got %v\033[0m\n", token.line, token.column, kinds, token.kind)
+			print_loc_helper(p.t.data, token.loc, token.width)
+		}
 	}
 	p.last_token = token
 	return

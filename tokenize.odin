@@ -54,18 +54,19 @@ Tokenizer :: struct {
 }
 
 next_rune :: proc(t: ^Tokenizer) -> rune {
-	t.last_loc = t.loc
-	if t.r == '\n' {
-		t.loc.column = 1
-		t.loc.line += 1
-	} else if t.r != '\r' {
-		t.loc.column += 1
-	}
-	t.loc.offset += t.w 
-	t.lr = t.r
-	t.r, t.w = utf8.decode_rune(t.data[t.loc.offset:])
 	if t.loc.offset >= len(t.data) {
 		t.r = utf8.RUNE_EOF
+	} else {
+		t.last_loc = t.loc
+		if t.r == '\n' {
+			t.loc.column = 1
+			t.loc.line += 1
+		} else if t.r != '\r' {
+			t.loc.column += 1
+		}
+		t.loc.offset += t.w 
+		t.lr = t.r
+		t.r, t.w = utf8.decode_rune(t.data[t.loc.offset:])
 	}
 	return t.r
 }
