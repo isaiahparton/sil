@@ -8,6 +8,7 @@ import "core:math/bits"
 import "core:strings"
 import "core:strconv"
 import "core:runtime"
+import "core:reflect"
 
 import "core:unicode"
 import "core:unicode/utf8"
@@ -16,7 +17,10 @@ Composer :: struct {
 	w: io.Writer,
 	indent: int,
 	lines: int,
-	ignore_zero_fields: bool,
+	// If struct fields with no data should be included
+	include_zero_fields: bool,
+	// If enums should be written as their names instead of index
+	enums_as_names: bool,
 }
 write_indent :: proc(c: ^Composer) -> (err: Error) {
 	io.write_byte(c.w, '\n') or_return
@@ -204,7 +208,20 @@ compose :: proc(c: ^Composer, v: any) -> (err: Error) {
 		io.write_u64(c.w, bit_data, 16) or_return
 
 		case runtime.Type_Info_Enum: 
-		compose(c, {v.data, info.base.id})
+		ev_, ok := reflect.as_i64(v)
+		ev := runtime.Type_Info_Enum_Value(ev_)
+		if ok {
+			for val, i in info.values {
+				if val == ev {
+					if c.enums_as_names {
+						io.write_string(c.w, info.names[i]) or_return
+					} else {
+						io.write_int(c.w, i) or_return
+					}
+					break
+				}
+			}
+		}
 
 		case runtime.Type_Info_Integer: 
 		switch i in v {

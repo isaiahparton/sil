@@ -16,6 +16,7 @@ Choice :: enum {
 Choice_Set :: bit_set[Choice]
 
 Thing :: struct {
+	pos: [2]f32,
 	number: f64,
 	name: string,
 	boolean: bool,
@@ -24,7 +25,6 @@ Thing :: struct {
 	options: struct{mode: int, speed: f64},
 	array: [dynamic]int,
 	pool: map[string]int,
-	list: [10]string,
 	maybe: Maybe(string),
 	child: Sub_Thing,
 }
@@ -66,6 +66,7 @@ main :: proc() {
 		fmt.printf("Finished parsing in %fms\n", time.duration_milliseconds(time.since(t)))
 
 		fmt.println(thing)
+		fmt.println(transmute([]u8)thing.name)
 		if file, err := os.open("out.sil", os.O_CREATE | os.O_WRONLY | os.O_TRUNC); err == os.ERROR_NONE {
 			c: Composer = {
 				w = io.to_writer(os.stream_from_handle(file)),

@@ -1,8 +1,11 @@
-name "isaiah partonian"
+name "C:\\here\\there\\this"
 number 12.5
 choice Third
 child
  hash 123
 pool
- "isaiah" 19
+ "the bite of" 87
+pos
+ - 12.5
+ - 16.2
 boolean true

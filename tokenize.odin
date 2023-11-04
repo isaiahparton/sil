@@ -54,19 +54,18 @@ Tokenizer :: struct {
 }
 
 next_rune :: proc(t: ^Tokenizer) -> rune {
+	t.last_loc = t.loc
+	if t.r == '\n' {
+		t.loc.column = 1
+		t.loc.line += 1
+	} else if t.r != '\r' {
+		t.loc.column += 1
+	}
+	t.loc.offset += t.w 
+	t.lr = t.r
+	t.r, t.w = utf8.decode_rune(t.data[t.loc.offset:])
 	if t.loc.offset >= len(t.data) {
 		t.r = utf8.RUNE_EOF
-	} else {
-		t.last_loc = t.loc
-		if t.r == '\n' {
-			t.loc.column = 1
-			t.loc.line += 1
-		} else if t.r != '\r' {
-			t.loc.column += 1
-		}
-		t.loc.offset += t.w 
-		t.lr = t.r
-		t.r, t.w = utf8.decode_rune(t.data[t.loc.offset:])
 	}
 	return t.r
 }
@@ -108,17 +107,17 @@ next_token :: proc(t: ^Tokenizer) -> (token: Token, err: Error) {
 
 		case '#':
 		token.kind = .Comment 
-		loop3: for {
+		cycle: for {
 			switch next_rune(t) {
 				case '\r', '\n', utf8.RUNE_EOF:
-				break loop3
+				break cycle
 			}
 		}
 		token.text = t.data[token.offset:t.loc.offset]
 
 		case '-':
 		token.kind = .Separator
-		token.text = t.data[token.offset:t.loc.offset]
+		token.text = t.data[token.offset:t.loc.offset + 1]
 
 		case 'a'..='z', 'A'..='Z', '0'..='9', '_':
 		token.kind = .Integer
@@ -147,30 +146,51 @@ next_token :: proc(t: ^Tokenizer) -> (token: Token, err: Error) {
 
 		case '"': 
 		token.kind = .String
-		loop2: for {
+		b: strings.Builder
+		string_loop: for {
 			next_rune(t)
-			if (t.r == '"' && t.lr != '\\') {
-				switch next_rune(t) {
-					case ' ', '\n', '\r':
-					break loop2
-					case: 
-					fmt.printf("\033[1m[%i:%i] Embedded quotes must be escaped like this: \\\"\033[0m\n", t.loc.line, t.loc.column)
-					print_loc_helper(t.data, t.last_loc, 1)
-				}
-			} else if t.r == utf8.RUNE_EOF || t.r == '\n' {
+			if t.r == utf8.RUNE_EOF || t.r == '\n' {
 				fmt.printf("\033[1m[%i:%i] Open ended string!\033[0m\n", t.loc.line, t.loc.column)
 				print_loc_helper(t.data, t.last_loc, 1)
 				token.kind = .Invalid
 				break
+			} else if t.lr == '\\' {
+				switch t.r {
+					case '\\': 	
+					strings.write_rune(&b, '\\')
+					t.r = 0
+					case '"': 	strings.write_rune(&b, '"')
+					case 'n': 	strings.write_rune(&b, '\n')
+					case 'r': 	strings.write_rune(&b, '\r')
+					case 't': 	strings.write_rune(&b, '\t')
+					case '0': 	strings.write_rune(&b, 0x0)
+					case: 
+					token.kind = .Invalid 
+					break string_loop
+				}
+			} else if t.r == '"' {
+				// fmt.printf("\033[1m[%i:%i] Embedded quotes must be escaped like this: \\\"\033[0m\n", t.loc.line, t.loc.column)
+				// print_loc_helper(t.data, t.last_loc, 1)
+				break string_loop
+			} else if t.r != '\\' {
+				strings.write_rune(&b, t.r)
 			}
 		}
-		token.text = t.data[token.offset + 1:t.loc.offset - 1]
+		if token.kind == .String {
+			token.text = strings.to_string(b)
+		} else {
+			strings.builder_destroy(&b)
+		}
 
 		case '\r':
 		skip_rune(t)
 	}
 
-	token.width = t.loc.offset - token.offset
+	if token.kind == .Separator {
+		token.width = 1
+	} else {
+		token.width = t.loc.offset - token.offset
+	}
 
 	if token.kind == .Invalid {
 		fmt.printf("\033[1m[%i:%i] Invalid token\033[0m\n", token.line, token.column)

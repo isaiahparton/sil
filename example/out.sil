@@ -1,8 +1,10 @@
+pos
+ - 12.500
+ - 16.200
 number 12.500
-name "isaiah partonian"
+name "C:\\here\\there\\this"
 boolean true
-choice 2
 pool
- "isaiah" 19
+ "the bite of" 87
 child
  hash 123

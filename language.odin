@@ -1,6 +1,7 @@
 package sil
 
 import "core:io"
+import "core:mem"
 import "core:strings"
 import "core:runtime"
 
@@ -21,6 +22,7 @@ General_Error :: enum {
 
 Error :: union {
 	io.Error,
+	mem.Allocator_Error,
 	General_Error,
 	Parse_Error,
 	Tokenize_Error,

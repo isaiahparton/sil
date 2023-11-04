@@ -48,6 +48,8 @@ parse :: proc(p: ^Parser, v: any) -> (err: Error) {
 			data = raw_data(data),
 			cap = 1,
 		}
+		p.indent += 1
+		defer p.indent -= 1
 		// Loop until indent decreases
 		for {
 			p.token, err = expect_token_indent(p, {.Separator})
@@ -106,8 +108,9 @@ parse :: proc(p: ^Parser, v: any) -> (err: Error) {
 			}*/
 			// Expected column for identifiers
 			p.indent += 1
+			defer p.indent -= 1
 			// Require separator?
-			require_separator := type_requires_separator(info.elem)
+			//require_separator := type_requires_separator(info.elem)
 			// Stuff
 			index: int
 			// Loop until indent decreases
@@ -139,6 +142,7 @@ parse :: proc(p: ^Parser, v: any) -> (err: Error) {
 			names_parsed := make([]bool, len(enum_info.names))
 			// Expected column for identifiers
 			p.indent += 1
+			defer p.indent -= 1
 			// Require separator?
 			require_separator := type_requires_separator(info.elem)
 			// Stuff
@@ -173,6 +177,7 @@ parse :: proc(p: ^Parser, v: any) -> (err: Error) {
 			}*/
 			// Expected column for identifiers
 			p.indent += 1
+			defer p.indent -= 1
 			// Loop until indent decreases
 			for {
 				p.token, err = expect_token_indent(p, {.Separator})
@@ -212,6 +217,7 @@ parse :: proc(p: ^Parser, v: any) -> (err: Error) {
 			}*/
 			// Expected column for identifiers
 			p.indent += 1
+			defer p.indent -= 1
 			#partial switch key_info in info.key.variant {
 				case runtime.Type_Info_Struct, runtime.Type_Info_Array, runtime.Type_Info_Enumerated_Array: 
 				// Loop until indent decreases
@@ -280,6 +286,7 @@ parse :: proc(p: ^Parser, v: any) -> (err: Error) {
 		case runtime.Type_Info_Struct:
 		// Expected column for identifiers
 		p.indent += 1
+		defer p.indent -= 1
 		// Loop until indent decreases
 		for {
 			p.token, err = expect_token_indent(p, {.Identifier})
@@ -311,7 +318,7 @@ parse :: proc(p: ^Parser, v: any) -> (err: Error) {
 		/*if p.replace {
 			delete((transmute(^string)v.data)^)
 		}*/
-		(transmute(^string)v.data)^ = strings.clone(p.token.text)
+		(transmute(^string)v.data)^ = p.token.text
 
 		case runtime.Type_Info_Boolean: 
 		p.token = expect_literal(p, {.True, .False}) or_return
@@ -355,21 +362,8 @@ parse :: proc(p: ^Parser, v: any) -> (err: Error) {
 			found := false
 			for name, i in info.names {
 				if name == p.token.text {
-					switch info.base.id {
-						case u8: (transmute(^u8)v.data)^ = u8(info.values[i])
-						case u16: (transmute(^u16)v.data)^ = u16(info.values[i])
-						case u32: (transmute(^u32)v.data)^ = u32(info.values[i])
-						case u64: (transmute(^u64)v.data)^ = u64(info.values[i])
-						case u128: (transmute(^u128)v.data)^ = u128(info.values[i])
-						case uint: (transmute(^uint)v.data)^ = uint(info.values[i])
-						case i8: (transmute(^i8)v.data)^ = i8(info.values[i])
-						case i16: (transmute(^i16)v.data)^ = i16(info.values[i])
-						case i32: (transmute(^i32)v.data)^ = i32(info.values[i])
-						case i64: (transmute(^i64)v.data)^ = i64(info.values[i])
-						case i128: (transmute(^i128)v.data)^ = i128(info.values[i])
-						case int: (transmute(^int)v.data)^ = int(info.values[i])
-						case: return .Invalid_Enum_Value_Type
-					}
+					ev := any{data = v.data, id = info.base.id}
+					ev = info.values[i]
 					found = true
 					break
 				}
@@ -380,21 +374,8 @@ parse :: proc(p: ^Parser, v: any) -> (err: Error) {
 				return .Invalid_Enum_Value
 			}
 			case .Integer:
-			switch info.base.id {
-				case u8: (transmute(^u8)v.data)^ = u8(strconv.parse_u64(p.token.text) or_else 0)
-				case u16: (transmute(^u16)v.data)^ = u16(strconv.parse_u64(p.token.text) or_else 0)
-				case u32: (transmute(^u32)v.data)^ = u32(strconv.parse_u64(p.token.text) or_else 0)
-				case u64: (transmute(^u64)v.data)^ = u64(strconv.parse_u64(p.token.text) or_else 0)
-				case u128: (transmute(^u128)v.data)^ = u128(strconv.parse_u128(p.token.text) or_else 0)
-				case uint: (transmute(^uint)v.data)^ = uint(strconv.parse_uint(p.token.text) or_else 0)
-				case i8: (transmute(^i8)v.data)^ = i8(strconv.parse_i64(p.token.text) or_else 0)
-				case i16: (transmute(^i16)v.data)^ = i16(strconv.parse_i64(p.token.text) or_else 0)
-				case i32: (transmute(^i32)v.data)^ = i32(strconv.parse_i64(p.token.text) or_else 0)
-				case i64: (transmute(^i64)v.data)^ = i64(strconv.parse_i64(p.token.text) or_else 0)
-				case i128: (transmute(^i128)v.data)^ = i128(strconv.parse_i128(p.token.text) or_else 0)
-				case int: (transmute(^int)v.data)^ = int(strconv.parse_int(p.token.text) or_else 0)
-				case: return .Invalid_Enum_Value_Type
-			}
+			ev := any{data = v.data, id = info.base.id}
+			ev = info.values[strconv.parse_i64(p.token.text) or_else 0]
 		}
 
 		case runtime.Type_Info_Integer: 
@@ -455,16 +436,16 @@ expect_token_indent :: proc(p: ^Parser, kinds: Token_Kind_Set) -> (token: Token,
 		err = .Invalid_Token
 	} else {
 		// Check if indentation matches
-		if token.line > p.last_token.line && token.column != p.indent {
+		token_indent := token.column
+		if token.line > p.last_token.line && token_indent != p.indent {
 			p.t.next_token = token
 			// Return what happened
-			if token.column > p.indent {
+			if token_indent > p.indent {
 				err = .Indent_Increased
 				fmt.printf("\033[1m[%i:%i] Unexpected indentation\033[0m\n", token.line, token.column)
 				print_loc_helper(p.t.data, token.loc, token.width)
 			} else {
 				err = .Indent_Decreased
-				p.indent -= 1
 			}
 			return
 		}
@@ -500,4 +481,176 @@ expect_token :: proc(p: ^Parser, kinds: Token_Kind_Set) -> (token: Token, err: E
 	}
 	p.last_token = token
 	return
+}
+
+unquote_string :: proc(token: Token) -> (value: string, err: Error) {
+	get_u2_rune :: proc(s: string) -> rune {
+		if len(s) < 4 || s[0] != '\\' || s[1] != 'x' {
+			return -1
+		}
+
+		r: rune
+		for c in s[2:4] {
+			x: rune
+			switch c {
+			case '0'..='9': x = c - '0'
+			case 'a'..='f': x = c - 'a' + 10
+			case 'A'..='F': x = c - 'A' + 10
+			case: return -1
+			}
+			r = r*16 + x
+		}
+		return r
+	}
+	get_u4_rune :: proc(s: string) -> rune {
+		if len(s) < 6 || s[0] != '\\' || s[1] != 'u' {
+			return -1
+		}
+
+		r: rune
+		for c in s[2:6] {
+			x: rune
+			switch c {
+			case '0'..='9': x = c - '0'
+			case 'a'..='f': x = c - 'a' + 10
+			case 'A'..='F': x = c - 'A' + 10
+			case: return -1
+			}
+			r = r*16 + x
+		}
+		return r
+	}
+
+	if token.kind != .String {
+		return "", nil
+	}
+	s := token.text
+	if len(s) <= 2 {
+		return "", nil
+	}
+	quote := s[0]
+	if s[0] != s[len(s)-1] {
+		// Invalid string
+		return "", nil
+	}
+	s = s[1:len(s)-1]
+
+	i := 0
+	for i < len(s) {
+		c := s[i]
+		if c == '\\' || c == quote || c < ' ' {
+			break
+		}
+		if c < utf8.RUNE_SELF {
+			i += 1
+			continue
+		}
+		r, w := utf8.decode_rune_in_string(s)
+		if r == utf8.RUNE_ERROR && w == 1 {
+			break
+		}
+		i += w
+	}
+	if i == len(s) {
+		return strings.clone(s), nil
+	}
+
+	b := mem.alloc_bytes(len(s) + 2*utf8.UTF_MAX, 1) or_return
+	w := copy(b, s[0:i])
+
+	/*if len(b) == 0 && allocator.data == nil {
+		// `unmarshal_count_array` calls us with a nil allocator
+		return string(b[:w]), nil
+	}*/
+
+	loop: for i < len(s) {
+		c := s[i]
+		switch {
+		case c == '\\':
+			i += 1
+			if i >= len(s) {
+				break loop
+			}
+			switch s[i] {
+			case: break loop
+			case '"',  '\'', '\\', '/':
+				b[w] = s[i]
+				i += 1
+				w += 1
+
+			case 'b':
+				b[w] = '\b'
+				i += 1
+				w += 1
+			case 'f':
+				b[w] = '\f'
+				i += 1
+				w += 1
+			case 'r':
+				b[w] = '\r'
+				i += 1
+				w += 1
+			case 't':
+				b[w] = '\t'
+				i += 1
+				w += 1
+			case 'n':
+				b[w] = '\n'
+				i += 1
+				w += 1
+			case 'u':
+				i -= 1 // Include the \u in the check for sanity sake
+				r := get_u4_rune(s[i:])
+				if r < 0 {
+					break loop
+				}
+				i += 6
+
+				buf, buf_width := utf8.encode_rune(r)
+				copy(b[w:], buf[:buf_width])
+				w += buf_width
+
+
+			case '0':
+				b[w] = '\x00'
+				i += 1
+				w += 1
+			case 'v':
+				b[w] = '\v'
+				i += 1
+				w += 1
+
+			case 'x':
+				i -= 1 // Include the \x in the check for sanity sake
+				r := get_u2_rune(s[i:])
+				if r < 0 {
+					break loop
+				}
+				i += 4
+
+				buf, buf_width := utf8.encode_rune(r)
+				copy(b[w:], buf[:buf_width])
+				w += buf_width
+			}
+
+		case c == quote, c < ' ':
+			break loop
+
+		case c < utf8.RUNE_SELF:
+			b[w] = c
+			i += 1
+			w += 1
+
+		case:
+			r, width := utf8.decode_rune_in_string(s[i:])
+			i += width
+
+			buf, buf_width := utf8.encode_rune(r)
+			assert(buf_width <= width)
+			copy(b[w:], buf[:buf_width])
+			w += buf_width
+		}
+	}
+
+	return string(b[:w]), nil
 }
