@@ -1,11 +1,13 @@
-name "C:\\here\\there\\this"
 number 12.5
-choice Third
 child
  hash 123
 pool
  "the bite of" 87
+maybe "definitely"
 pos
  - 12.5
  - 16.2
 boolean true
+name "C:\\here\\there\\this"
+choice Third
+value 5 hash 527

@@ -27,12 +27,12 @@ Thing :: struct {
 	pool: map[string]int,
 	maybe: Maybe(string),
 	child: Sub_Thing,
+	value: Value,
 }
 
 Sub_Thing :: struct {
 	hash: u32,
 	description: string,
-	value: Value,
 }
 
 Value :: union {
@@ -40,6 +40,7 @@ Value :: union {
 	i64,
 	f64,
 	bool,
+	Sub_Thing,
 }
 
 Key :: struct {
@@ -66,7 +67,9 @@ main :: proc() {
 		fmt.printf("Finished parsing in %fms\n", time.duration_milliseconds(time.since(t)))
 
 		fmt.println(thing)
-		fmt.println(transmute([]u8)thing.name)
+		thing.value = Sub_Thing{
+			hash = 527,
+		}
 		if file, err := os.open("out.sil", os.O_CREATE | os.O_WRONLY | os.O_TRUNC); err == os.ERROR_NONE {
 			c: Composer = {
 				w = io.to_writer(os.stream_from_handle(file)),

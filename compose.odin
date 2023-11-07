@@ -4,6 +4,7 @@ import "core:io"
 import "core:os"
 import "core:fmt"
 import "core:mem"
+import "core:time"
 import "core:math/bits"
 import "core:strings"
 import "core:strconv"
@@ -67,14 +68,14 @@ compose :: proc(c: ^Composer, v: any) -> (err: Error) {
 		}
 
 		case runtime.Type_Info_Enumerated_Array:
-		index_info := info.index.variant.(runtime.Type_Info_Enum)
+		index_info := runtime.type_info_base(info.index).variant.(runtime.Type_Info_Enum)
 		for i in 0..<info.count {
 			if (i > 0) {
 				write_indent(c)
 			}
 			prev_indent := c.indent
 			io.write_string(c.w, index_info.names[i]) or_return
-			write_element_separator(c, runtime.type_info_base(info.elem)) or_return
+			write_value_separator(c, runtime.type_info_base(info.elem)) or_return
 			compose(c, any{data = rawptr(uintptr(v.data) + uintptr(i * info.elem_size)), id = info.elem.id}) or_return
 			c.indent = prev_indent
 		}
@@ -125,12 +126,12 @@ compose :: proc(c: ^Composer, v: any) -> (err: Error) {
 		if v.data == nil || tag == 0 {
 			io.write_string(c.w, "nil") or_return
 		} else {
-			id := info.variants[tag-1].id
+			vi := tag if info.no_nil else (tag - 1)
 			if len(info.variants) > 1 {
 				io.write_i64(c.w, tag) or_return
-				write_value_separator(c, info.variants[tag-1])
+				write_value_separator(c, runtime.type_info_base(info.variants[vi]))
+				compose(c, any{v.data, info.variants[vi].id}) or_return
 			}
-			compose(c, any{v.data, id}) or_return
 		}
 
 		case runtime.Type_Info_Struct:
@@ -238,7 +239,7 @@ compose :: proc(c: ^Composer, v: any) -> (err: Error) {
 			case u16: 	io.write_u64(c.w, u64(i)) or_return
 			case u8: 		io.write_u64(c.w, u64(i)) or_return
 			case: 
-			return .Unsupported_Type,
+			return .Unsupported_Type
 		}
 
 		case runtime.Type_Info_Float: 

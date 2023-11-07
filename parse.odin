@@ -54,7 +54,7 @@ parse :: proc(p: ^Parser, v: any) -> (err: Error) {
 		for {
 			p.token, err = expect_token_indent(p, {.Separator})
 			// Handle indent errors
-			if err == .Indent_Increased || err == .Indent_Decreased {
+			if err == .Indent_Increased || err == .Indent_Decreased || err == Tokenize_Error.EOF {
 				err = nil
 				break
 			} else if err != nil {
@@ -117,7 +117,7 @@ parse :: proc(p: ^Parser, v: any) -> (err: Error) {
 			for {
 				p.token, err = expect_token_indent(p, {.Separator})
 				// Handle indent errors
-				if err == .Indent_Increased || err == .Indent_Decreased {
+				if err == .Indent_Increased || err == .Indent_Decreased || err == Tokenize_Error.EOF {
 					err = nil
 					break
 				} else if err != nil {
@@ -138,7 +138,7 @@ parse :: proc(p: ^Parser, v: any) -> (err: Error) {
 					destroy_recursive(rawptr(uintptr(v.data) + uintptr(info.elem_size * i)), info.elem)
 				}
 			}*/
-			enum_info := info.index.variant.(runtime.Type_Info_Enum)
+			enum_info := runtime.type_info_base(info.index).variant.(runtime.Type_Info_Enum)
 			names_parsed := make([]bool, len(enum_info.names))
 			// Expected column for identifiers
 			p.indent += 1
@@ -151,7 +151,7 @@ parse :: proc(p: ^Parser, v: any) -> (err: Error) {
 			for {
 				p.token, err = expect_token_indent(p, {.Identifier})
 				// Handle indent errors
-				if err == .Indent_Increased || err == .Indent_Decreased {
+				if err == .Indent_Increased || err == .Indent_Decreased || err == Tokenize_Error.EOF {
 					err = nil
 					break
 				} else if err != nil {
@@ -182,7 +182,7 @@ parse :: proc(p: ^Parser, v: any) -> (err: Error) {
 			for {
 				p.token, err = expect_token_indent(p, {.Separator})
 				// Handle indent errors
-				if err == .Indent_Increased || err == .Indent_Decreased {
+				if err == .Indent_Increased || err == .Indent_Decreased || err == Tokenize_Error.EOF {
 					err = nil
 					break
 				} else if err != nil {
@@ -224,7 +224,7 @@ parse :: proc(p: ^Parser, v: any) -> (err: Error) {
 				for {
 					p.token, err = expect_token_indent(p, {.Separator})
 					// Handle indent errors
-					if err == .Indent_Increased || err == .Indent_Decreased {
+					if err == .Indent_Increased || err == .Indent_Decreased || err == Tokenize_Error.EOF {
 						err = nil
 						break
 					} else if err != nil {
@@ -291,10 +291,13 @@ parse :: proc(p: ^Parser, v: any) -> (err: Error) {
 		for {
 			p.token, err = expect_token_indent(p, {.Identifier})
 			// Handle indent errors
-			if err == .Indent_Increased || err == .Indent_Decreased {
-				err = nil
-				break
-			} else if err != nil {
+			if err != nil {
+				switch err {
+					// Ignore these errors
+					case .Indent_Decreased, .Indent_Increased, Tokenize_Error.EOF:
+					err = nil 
+					case: break
+				}
 				return
 			}
 			// Find field
@@ -362,8 +365,7 @@ parse :: proc(p: ^Parser, v: any) -> (err: Error) {
 			found := false
 			for name, i in info.names {
 				if name == p.token.text {
-					ev := any{data = v.data, id = info.base.id}
-					ev = info.values[i]
+					mem.copy(v.data, &info.values[i], info.base.size)
 					found = true
 					break
 				}
@@ -374,8 +376,7 @@ parse :: proc(p: ^Parser, v: any) -> (err: Error) {
 				return .Invalid_Enum_Value
 			}
 			case .Integer:
-			ev := any{data = v.data, id = info.base.id}
-			ev = info.values[strconv.parse_i64(p.token.text) or_else 0]
+			mem.copy(v.data, &info.values[strconv.parse_i64(p.token.text) or_else 0], info.base.size)
 		}
 
 		case runtime.Type_Info_Integer: 
@@ -408,9 +409,11 @@ parse :: proc(p: ^Parser, v: any) -> (err: Error) {
 }
 
 skip_comments :: proc(p: ^Parser) -> (token: Token, err: Error) {
-	token, err = next_token(&p.t)
-	for token.kind == .Comment {
+	for {
 		token, err = next_token(&p.t)
+		if token.kind != .Comment {
+			break
+		}
 	}
 	return
 }
@@ -430,7 +433,7 @@ expect_token_indent :: proc(p: ^Parser, kinds: Token_Kind_Set) -> (token: Token,
 	token, err = skip_comments(p)
 	// EOF is not necessarily an error
 	if err == Tokenize_Error.EOF {
-		err = nil
+		return
 	}
 	if token.kind == .Invalid {
 		err = .Invalid_Token
@@ -465,7 +468,7 @@ expect_token :: proc(p: ^Parser, kinds: Token_Kind_Set) -> (token: Token, err: E
 	token, err = skip_comments(p)
 	// EOF is not necessarily an error
 	if err == Tokenize_Error.EOF {
-		err = nil
+		return
 	}
 	if token.kind == .Invalid {
 		err = .Invalid_Token
