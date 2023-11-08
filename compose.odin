@@ -26,7 +26,7 @@ Composer :: struct {
 write_indent :: proc(c: ^Composer) -> (err: Error) {
 	io.write_byte(c.w, '\n') or_return
 	for i in 0..<c.indent {
-		io.write_rune(c.w, INDENT_RUNE) or_return
+		io.write_rune(c.w, ' ') or_return
 	}
 	return
 }
@@ -37,17 +37,18 @@ write_value_separator :: proc(c: ^Composer, type_info: ^runtime.Type_Info) -> (e
 		write_indent(c)
 
 		case: 
-		io.write_rune(c.w, VALUE_SEPARATOR_RUNE) or_return
+		io.write_rune(c.w, ' ') or_return
 	}
 	return
 }
 write_element_separator :: proc(c: ^Composer, type_info: ^runtime.Type_Info) -> (err: Error) {
 	if type_requires_separator(type_info) {
-		io.write_byte(c.w, '-') or_return
+		io.write_rune(c.w, SEPARATOR_RUNE) or_return
 		c.indent += 1
 		write_indent(c) or_return
 	} else {
-		io.write_string(c.w, "- ")
+		io.write_rune(c.w, SEPARATOR_RUNE)
+		io.write_rune(c.w, ' ')
 	}
 	return
 }
@@ -129,9 +130,9 @@ compose :: proc(c: ^Composer, v: any) -> (err: Error) {
 			vi := tag if info.no_nil else (tag - 1)
 			if len(info.variants) > 1 {
 				io.write_i64(c.w, tag) or_return
-				write_value_separator(c, runtime.type_info_base(info.variants[vi]))
-				compose(c, any{v.data, info.variants[vi].id}) or_return
 			}
+			write_value_separator(c, runtime.type_info_base(info.variants[vi]))
+			compose(c, any{v.data, info.variants[vi].id}) or_return
 		}
 
 		case runtime.Type_Info_Struct:
@@ -206,7 +207,7 @@ compose :: proc(c: ^Composer, v: any) -> (err: Error) {
 				bit_data = u64(x)
 			case: panic("unknown bit_size size")
 		}
-		io.write_u64(c.w, bit_data, 16) or_return
+		io.write_u64(c.w, bit_data, 10) or_return
 
 		case runtime.Type_Info_Enum: 
 		ev_, ok := reflect.as_i64(v)
@@ -225,7 +226,42 @@ compose :: proc(c: ^Composer, v: any) -> (err: Error) {
 		}
 
 		case runtime.Type_Info_Integer: 
+		u: u128
 		switch i in v {
+			case i8:      u = u128(i)
+			case i16:     u = u128(i)
+			case i32:     u = u128(i)
+			case i64:     u = u128(i)
+			case i128:    u = u128(i)
+			case int:     u = u128(i)
+			case u8:      u = u128(i)
+			case u16:     u = u128(i)
+			case u32:     u = u128(i)
+			case u64:     u = u128(i)
+			case u128:    u = u128(i)
+			case uint:    u = u128(i)
+			case uintptr: u = u128(i)
+
+			case i16le:  u = u128(i)
+			case i32le:  u = u128(i)
+			case i64le:  u = u128(i)
+			case u16le:  u = u128(i)
+			case u32le:  u = u128(i)
+			case u64le:  u = u128(i)
+			case u128le: u = u128(i)
+
+			case i16be:  u = u128(i)
+			case i32be:  u = u128(i)
+			case i64be:  u = u128(i)
+			case u16be:  u = u128(i)
+			case u32be:  u = u128(i)
+			case u64be:  u = u128(i)
+			case u128be: u = u128(i)
+		}
+		buf: [40]u8
+		s := strconv.append_bits_128(buf[:], u, 10, info.signed, 8*ti.size, "0123456789", nil)
+		io.write_string(c.w, s) or_return
+		/*switch i in v {
 			case int: 	io.write_int(c.w, i) or_return
 			case i128: 	io.write_i128(c.w, i) or_return
 			case i64: 	io.write_i64(c.w, i) or_return
@@ -240,7 +276,7 @@ compose :: proc(c: ^Composer, v: any) -> (err: Error) {
 			case u8: 		io.write_u64(c.w, u64(i)) or_return
 			case: 
 			return .Unsupported_Type
-		}
+		}*/
 
 		case runtime.Type_Info_Float: 
 		buf: [84]u8
@@ -294,7 +330,7 @@ compose :: proc(c: ^Composer, v: any) -> (err: Error) {
 					// Save previous indent
 					prev_indent := c.indent
 					// Begin the entry
-					io.write_string(c.w, "-") or_return
+					io.write_rune(c.w, SEPARATOR_RUNE) or_return
 					c.indent += 1
 					write_indent(c) or_return
 					// Print the key as a struct field
@@ -317,9 +353,11 @@ compose :: proc(c: ^Composer, v: any) -> (err: Error) {
 					// Return to previous indent
 					c.indent = prev_indent
 					case:
+					prev_indent := c.indent
 					compose(c, any{key, info.key.id}) or_return
 					write_value_separator(c, runtime.type_info_base(info.value)) or_return
 					compose(c, any{value, info.value.id})
+					c.indent = prev_indent
 				}
 			}
 		}

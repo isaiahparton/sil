@@ -8,10 +8,7 @@ import "core:runtime"
 /*
 	Simple Information Language
 */
-
-PLACEHOLDER_RUNE :: '-'
-VALUE_SEPARATOR_RUNE :: ' '
-INDENT_RUNE :: ' '
+SEPARATOR_RUNE :: ';'
 
 General_Error :: enum {
 	Invalid_Token,

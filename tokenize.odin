@@ -115,11 +115,11 @@ next_token :: proc(t: ^Tokenizer) -> (token: Token, err: Error) {
 		}
 		token.text = t.data[token.offset:t.loc.offset]
 
-		case '-':
+		case SEPARATOR_RUNE:
 		token.kind = .Separator
 		token.text = t.data[token.offset:t.loc.offset + 1]
 
-		case 'a'..='z', 'A'..='Z', '0'..='9', '_':
+		case 'a'..='z', 'A'..='Z', '0'..='9', '_', '-':
 		token.kind = .Integer
 		loop: for {
 			switch next_rune(t) {

@@ -35,9 +35,10 @@ compose_to_writer :: proc(w: io.Writer, v: any) -> (err: Error) {
 	}
 	return compose(&c, v)
 }
-compose_to_file :: proc(file: string, v: any) -> (err: Error) {
-	if file, err := os.open(file, os.O_WRONLY | os.O_CREATE | os.O_TRUNC, 644); err == os.ERROR_NONE {
-		compose_to_writer(io.to_writer(os.stream_from_handle(file)), v) or_return
+compose_to_file :: proc(file_path: string, v: any) -> (err: Error) {
+	if file, err := os.open(file_path, os.O_WRONLY | os.O_CREATE | os.O_TRUNC, 644); err == os.ERROR_NONE {
+		s := os.stream_from_handle(file)
+		compose_to_writer(io.to_writer(s), v) or_return
 		os.close(file)
 	}
 	return

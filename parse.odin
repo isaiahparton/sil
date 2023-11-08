@@ -263,7 +263,7 @@ parse :: proc(p: ^Parser, v: any) -> (err: Error) {
 					key_data, _ := mem.alloc(info.key.size)
 					defer mem.free(key_data)
 					if key_err := parse(p, any{data = key_data, id = info.key.id}); key_err != nil {
-						if key_err != .Unexpected_Token {
+						if key_err != .Unexpected_Token && key_err != Tokenize_Error.EOF {
 							err = key_err
 						}
 						return
@@ -272,7 +272,7 @@ parse :: proc(p: ^Parser, v: any) -> (err: Error) {
 					value_data, _ := mem.alloc(info.value.size)
 					defer mem.free(value_data)
 					if value_err := parse(p, any{data = value_data, id = info.value.id}); value_err != nil {
-						if value_err != .Unexpected_Token {
+						if value_err != .Unexpected_Token && value_err != Tokenize_Error.EOF {
 							err = value_err
 						}
 						return
@@ -302,11 +302,22 @@ parse :: proc(p: ^Parser, v: any) -> (err: Error) {
 			}
 			// Find field
 			found := false
-			for name, i in info.names {
+			struct_loop: for name, i in info.names {
 				if name == p.token.text {
 					parse(p, any{data = rawptr(uintptr(v.data) + info.offsets[i]), id = info.types[i].id}) or_return
 					found = true
 					break
+				} else if info.usings[i] {
+					// Search for matching fields in used structs
+					if using_info, ok := info.types[i].variant.(runtime.Type_Info_Struct); ok {
+						for using_name, j in using_info.names {
+							if using_name == p.token.text {
+								parse(p, any{data = rawptr(uintptr(v.data) + info.offsets[i]), id = info.types[i].id}) or_return
+								found = true
+								break struct_loop
+							}
+						}
+					}
 				}
 			}
 			if !found {
@@ -410,7 +421,7 @@ parse :: proc(p: ^Parser, v: any) -> (err: Error) {
 
 skip_comments :: proc(p: ^Parser) -> (token: Token, err: Error) {
 	for {
-		token, err = next_token(&p.t)
+		token = next_token(&p.t) or_return
 		if token.kind != .Comment {
 			break
 		}
@@ -420,7 +431,7 @@ skip_comments :: proc(p: ^Parser) -> (token: Token, err: Error) {
 
 expect_literal :: proc(p: ^Parser, kinds: Token_Kind_Set) -> (token: Token, err: Error) {
 	loc := p.last_token.loc
-	token, err = expect_token(p, kinds)
+	token = expect_token(p, kinds) or_return
 	// Expect the token to be either directly after the last or on the next line with increased indent
 	if token.line > loc.line && token.column == loc.column {
 		err = .Literal_Not_Found

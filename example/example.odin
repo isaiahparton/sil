@@ -24,7 +24,7 @@ Thing :: struct {
 	choices: Choice_Set,
 	options: struct{mode: int, speed: f64},
 	array: [dynamic]int,
-	pool: map[string]int,
+	pool: map[string]Sub_Thing,
 	maybe: Maybe(string),
 	child: Sub_Thing,
 	value: Value,
