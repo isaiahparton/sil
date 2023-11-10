@@ -23,6 +23,7 @@ Error :: union {
 	General_Error,
 	Parse_Error,
 	Tokenize_Error,
+	Compose_Error,
 }
 
 Location :: struct {

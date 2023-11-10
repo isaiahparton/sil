@@ -1,16 +1,9 @@
-number 12.5
-child
- hash 123
-pool
- "the bite of"
- 	hash 235
- "the other bite of"
-  hash 87
-maybe "definitely"
-pos
- ~ 12.5
- ~ 16.2
-boolean true
-name "C:\\here\\there\\this"
-choice Third
-value 5 hash 527
+choice Second
+things
+ ;
+  name "isaiah"
+ ;
+  name "jack"
+perhaps
+ name "algabortrix"
+ value nil

@@ -72,31 +72,52 @@ parse :: proc(p: ^Parser, v: any) -> (err: Error) {
 		}
 
 		case runtime.Type_Info_Union: 
-		index := 1
-		if len(info.variants) > 1 {
-			// Get tag value
+		tag_any := any{data = rawptr(uintptr(v.data) + info.tag_offset), id = info.tag_type.id}
+		if info.no_nil {
 			p.token = expect_token(p, {.Integer}) or_return
 			if n, ok := strconv.parse_int(p.token.text); ok {
-				if n > len(info.variants) {
-					fmt.printf("\033[1m[%i:%i] Union tag out of bounds!\033[0m\n", p.token.line, p.token.column)
-					print_loc_helper(p.t.data, p.token.loc, p.token.width)
-					break
-				} else {
-					index = n
+				parse(p, any{data = v.data, id = info.variants[n].id})
+				switch t in &tag_any {
+					case i8: t = i8(n)
+					case u8: t = u8(n)
+					case i16: t = i16(n)
+					case u16: t = u16(n)
+					case i32: t = i32(n)
+					case u32: t = u32(n)
+					case i64: t = i64(n)
+					case u64: t = u64(n)
 				}
 			}
-		}
-		parse(p, any{data = v.data, id = info.variants[index if info.no_nil else (index - 1)].id})
-		tag_v := any{data = rawptr(uintptr(v.data) + info.tag_offset), id = info.tag_type.id}
-		switch &tag in &tag_v {
-			case i8: tag = i8(index)
-			case u8: tag = u8(index)
-			case i16: tag = i16(index)
-			case u16: tag = u16(index)
-			case i32: tag = i32(index)
-			case u32: tag = u32(index)
-			case i64: tag = i64(index)
-			case u64: tag = u64(index)
+		} else {
+			tag: Maybe(int) = 0
+			if len(info.variants) > 1 {
+				p.token = expect_token(p, {.Integer, .Nil}) or_return
+				#partial switch p.token.kind {
+					case .Integer: 
+					if n, ok := strconv.parse_int(p.token.text); ok {
+						tag = n
+					}
+					case .Nil: 
+					tag = nil
+				}
+			}
+			if i, ok := tag.?; ok {
+				parse(p, any{data = v.data, id = info.variants[i].id})
+			}
+			n := 0
+			if i, ok := tag.?; ok {
+				n = i + 1
+			}
+			switch t in &tag_any {
+				case i8: t = i8(n)
+				case u8: t = u8(n)
+				case i16: t = i16(n)
+				case u16: t = u16(n)
+				case i32: t = i32(n)
+				case u32: t = u32(n)
+				case i64: t = i64(n)
+				case u64: t = u64(n)
+			}
 		}
 
 		case runtime.Type_Info_Array: 

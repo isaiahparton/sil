@@ -1,17 +1,8 @@
-pos
- ~ 12.500
- ~ 16.200
-number 12.500
-name "C:\\here\\there\\this"
-boolean true
-choice 2
-pool
- "the other bite of"
-  hash 87
- "the bite of"
-  hash 235
-maybe  "definitely"
-child
- hash 123
-value 5
- hash 527
+things
+ ;
+  name "isaiah"
+ ;
+  name "jack"
+choice 1
+perhaps 
+ name "algabortrix"

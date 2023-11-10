@@ -14,6 +14,9 @@ import "core:reflect"
 import "core:unicode"
 import "core:unicode/utf8"
 
+Compose_Error :: enum {
+	Enum_Value_Not_Found,
+}
 Composer :: struct {
 	w: io.Writer,
 	indent: int,
@@ -124,16 +127,23 @@ compose :: proc(c: ^Composer, v: any) -> (err: Error) {
 			case i64:  tag = i64(i)
 			case: panic("Invalid union tag type")
 		}
-		if v.data == nil || tag == 0 {
-			io.write_string(c.w, "nil") or_return
+		if info.no_nil {
+			io.write_i64(c.w, tag) or_return
+			write_value_separator(c, runtime.type_info_base(info.variants[tag]))
+			compose(c, any{v.data, info.variants[tag].id}) or_return
 		} else {
-			vi := tag if info.no_nil else (tag - 1)
-			if len(info.variants) > 1 {
-				io.write_i64(c.w, tag) or_return
+			if tag == 0 {
+				io.write_string(c.w, "nil") or_return
+			} else {
+				tag -= 1
+				if len(info.variants) > 1 {
+					io.write_i64(c.w, tag) or_return
+				}
+				write_value_separator(c, runtime.type_info_base(info.variants[tag]))
+				compose(c, any{v.data, info.variants[tag].id}) or_return
 			}
-			write_value_separator(c, runtime.type_info_base(info.variants[vi]))
-			compose(c, any{v.data, info.variants[vi].id}) or_return
 		}
+		
 
 		case runtime.Type_Info_Struct:
 		j := 0
@@ -213,6 +223,7 @@ compose :: proc(c: ^Composer, v: any) -> (err: Error) {
 		ev_, ok := reflect.as_i64(v)
 		ev := runtime.Type_Info_Enum_Value(ev_)
 		if ok {
+			found := false
 			for val, i in info.values {
 				if val == ev {
 					if c.enums_as_names {
@@ -220,9 +231,16 @@ compose :: proc(c: ^Composer, v: any) -> (err: Error) {
 					} else {
 						io.write_int(c.w, i) or_return
 					}
+					found = true
 					break
 				}
 			}
+			if !found {
+				err = .Enum_Value_Not_Found
+				return
+			}
+		} else {
+			fmt.println("wow")
 		}
 
 		case runtime.Type_Info_Integer: 
